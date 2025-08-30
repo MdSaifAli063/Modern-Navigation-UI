@@ -130,8 +130,8 @@ Note: If you extend behavior, keep ARIA attributes and focus management in sync.
 ## 🖼️ Preview
 
 You can add a screenshot or animation here:
-- docs/preview.png ([recommended 1200×630 for social preview](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/2be33bbf764335b0d02b1bde8bd5893f758c8688/Screenshot%202025-08-31%20003550.png))
-
+- docs/preview.png (recommended 1200×630 for social preview)
+![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/2be33bbf764335b0d02b1bde8bd5893f758c8688/Screenshot%202025-08-31%20003550.png)
 ---
 
 ## 📄 License

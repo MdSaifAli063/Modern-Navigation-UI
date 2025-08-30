@@ -132,6 +132,8 @@ Note: If you extend behavior, keep ARIA attributes and focus management in sync.
 You can add a screenshot or animation here:
 - docs/preview.png (recommended 1200×630 for social preview)
 ![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/2be33bbf764335b0d02b1bde8bd5893f758c8688/Screenshot%202025-08-31%20003550.png)
+- Dark Mode
+![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/c8b1d9bf33889c01a3ac6eccc6d425f43399642c/Screenshot%202025-08-31%20005137.png)
 ---
 
 ## 📄 License

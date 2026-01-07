@@ -136,7 +136,6 @@ Note: If you extend behavior, keep ARIA attributes and focus management in sync.
 
 ---
 
-
 ## 📄 License
 
 MIT License – feel free to use, modify, and distribute.

@@ -36,7 +36,6 @@ You can add a screenshot or animation here:
 
 . ├─ index.html # Main markup (navigation, sections, footer) ├─ style.css # Styling (themes, layout, animations) └─ script.js # Interactivity (dropdowns, spy, counters, theme, search)
 
-
 ---
 
 ## 🚀 Getting Started

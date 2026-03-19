@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nexus — Modern Home</title>
+  <title>Logo — Modern Home</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet"/>
@@ -673,9 +673,9 @@
   <nav class="navbar" aria-label="Primary navigation">
 
     <!-- Logo -->
-    <a href="#" class="logo" aria-label="Nexus Home">
-      <span class="logo-box">N</span>
-      <span class="logo-word">Nexus</span>
+    <a href="#" class="logo" aria-label="Logo Home">
+      <span class="logo-box">L</span>
+      <span class="logo-word">LOGO</span>
     </a>
 
     <!-- Desktop links -->
@@ -861,10 +861,10 @@
 <footer class="footer">
   <div class="footer-inner">
     <div class="foot-brand">
-      <span class="logo-box" style="width:28px;height:28px;font-size:12px;border-radius:7px">N</span>
-      <span class="logo-word" style="font-size:14px">Nexus</span>
+      <span class="logo-box" style="width:28px;height:28px;font-size:12px;border-radius:7px">L</span>
+      <span class="logo-word" style="font-size:14px">LOGO</span>
     </div>
-    <span class="foot-copy">© <span id="yr"></span> Nexus. All rights reserved.</span>
+    <span class="foot-copy">© <span id="yr"></span> LOGO. All rights reserved.</span>
     <nav class="foot-links" aria-label="Footer">
       <a href="#home">Home</a>
       <a href="#features">Features</a>
@@ -962,15 +962,30 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  /* Desktop dropdown keyboard */
+  /* Desktop dropdown — click to toggle + keyboard */
   document.querySelectorAll(".dd-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const open = btn.getAttribute("aria-expanded") === "true";
+      // close all others
+      document.querySelectorAll(".dd-toggle").forEach(b => {
+        if (b !== btn) b.setAttribute("aria-expanded","false");
+      });
+      btn.setAttribute("aria-expanded", open ? "false" : "true");
+    });
     btn.addEventListener("keydown", e => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
         btn.setAttribute("aria-expanded","true");
         btn.nextElementSibling?.querySelector("a")?.focus();
       }
+      if (e.key === "Escape") btn.setAttribute("aria-expanded","false");
     });
+  });
+  // Close desktop dropdowns when clicking outside
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".has-dd")) {
+      document.querySelectorAll(".dd-toggle").forEach(b => b.setAttribute("aria-expanded","false"));
+    }
   });
 
   /* Search */

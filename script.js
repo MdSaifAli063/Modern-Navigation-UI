@@ -1,400 +1,194 @@
 "use strict";
 
-/**
- * Modern Navigation + Page UI Script
- * - Mobile menu toggle (with focus/escape handling)
- * - Accessible dropdowns (mobile) + keyboard support
- * - Theme toggle with persistence (light/dark; Shift+Click for auto)
- * - Sticky auto-hide header on scroll + scrolled class
- * - Back-to-top button
- * - Search suggestions with keyboard navigation
- * - Count-up stats on view
- * - Card hover glow following cursor
- * - Scroll spy to highlight active nav link
- * - Scroll reveal animation
- * - Footer year
- */
-
 document.addEventListener("DOMContentLoaded", () => {
-  const html = document.documentElement;
-  const header = document.querySelector(".header");
-  const navToggle = document.querySelector(".nav-toggle");
-  const navMenu = document.querySelector(".nav-menu");
-  const navLinks = Array.from(document.querySelectorAll(".nav-link[href^='#']"));
-  const dropdownToggles = Array.from(document.querySelectorAll(".has-dropdown > .dropdown-toggle"));
-  const themeToggleBtn = document.querySelector(".theme-toggle");
-  const moonIcon = document.querySelector(".moon-icon");
-  const sunIcon = document.querySelector(".sun-icon");
-  const toTopBtn = document.querySelector(".to-top");
-  const yearEl = document.getElementById("year");
+  const html       = document.documentElement;
+  const header     = document.getElementById("header");
+  const navToggle  = document.getElementById("nav-toggle");
+  const mobileMenu = document.getElementById("mobile-menu");
+  const themeBtn   = document.querySelector(".theme-toggle");
+  const moonIcon   = document.querySelector(".moon-icon");
+  const sunIcon    = document.querySelector(".sun-icon");
   const searchInput = document.querySelector(".search-input");
-  const suggestionsList = document.querySelector(".search-suggestions");
-  const cards = Array.from(document.querySelectorAll(".cards .card"));
-  const statValues = Array.from(document.querySelectorAll(".stat .value"));
+  const suggestions = document.querySelector(".search-suggestions");
+  const dropdownToggles = document.querySelectorAll(".dropdown-toggle");
+  const mobileGroupToggles = document.querySelectorAll(".mobile-group-toggle");
 
-  const MOBILE_BREAKPOINT = 800;
-  let isMobile = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
-
-  /* ── Utilities ─────────────────────────────────────── */
-  const prefersReduced = () =>
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  const throttle = (fn, wait = 100) => {
-    let last = 0, t;
-    return (...args) => {
-      const now = Date.now();
-      if (now - last >= wait) { last = now; fn(...args); }
-      else {
-        clearTimeout(t);
-        t = setTimeout(() => { last = Date.now(); fn(...args); }, wait - (now - last));
-      }
-    };
+  /* ── Utilities ──────────────────────────────── */
+  const throttle = (fn, ms) => {
+    let last = 0;
+    return (...a) => { const now = Date.now(); if (now - last >= ms) { last = now; fn(...a); } };
   };
-
-  const debounce = (fn, wait = 200) => {
+  const debounce = (fn, ms) => {
     let t;
-    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
   };
 
-  const smoothScrollTo = (top) =>
-    window.scrollTo({ top, behavior: prefersReduced() ? "auto" : "smooth" });
-
-  /* ── 1) Footer year ────────────────────────────────── */
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
-
-  /* ── 2) Theme ──────────────────────────────────────── */
-  const THEME_KEY = "preferred-theme";
-  const validTheme = (t) => ["light", "dark", "auto"].includes(t);
-
-  function applyTheme(theme, persist = true) {
-    if (!validTheme(theme)) theme = "auto";
+  /* ── 1. Theme ───────────────────────────────── */
+  const THEME_KEY = "nav-theme";
+  const applyTheme = (theme, save = true) => {
     html.setAttribute("data-theme", theme);
-    if (persist) try { localStorage.setItem(THEME_KEY, theme); } catch {}
+    if (save) try { localStorage.setItem(THEME_KEY, theme); } catch {}
+    const dark = theme === "dark" ||
+      (theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    moonIcon?.classList.toggle("hidden", dark);
+    sunIcon?.classList.toggle("hidden", !dark);
+    themeBtn?.setAttribute("aria-pressed", String(dark));
+  };
 
-    const effectiveDark =
-      theme === "dark" ||
-      (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Init from storage or html attribute
+  let stored; try { stored = localStorage.getItem(THEME_KEY); } catch {}
+  applyTheme(stored || html.getAttribute("data-theme") || "dark", false);
 
-    if (moonIcon && sunIcon) {
-      moonIcon.classList.toggle("hidden", effectiveDark);
-      sunIcon.classList.toggle("hidden", !effectiveDark);
-      themeToggleBtn?.setAttribute("aria-pressed", String(effectiveDark));
-    }
-  }
-
-  function initTheme() {
-    let stored = null;
-    try { stored = localStorage.getItem(THEME_KEY); } catch {}
-    applyTheme(validTheme(stored) ? stored : html.getAttribute("data-theme") || "auto", false);
-  }
-
-  initTheme();
-
-  themeToggleBtn?.addEventListener("click", (e) => {
-    const current = html.getAttribute("data-theme") || "auto";
-    applyTheme(e.shiftKey ? "auto" : current === "dark" ? "light" : "dark");
+  themeBtn?.addEventListener("click", (e) => {
+    const cur = html.getAttribute("data-theme") || "dark";
+    applyTheme(e.shiftKey ? "auto" : cur === "dark" ? "light" : "dark");
   });
 
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
     if ((localStorage.getItem(THEME_KEY) || "auto") === "auto") applyTheme("auto", false);
   });
 
-  /* ── 3) Mobile menu ────────────────────────────────── */
-  const closeMobileMenu = () => {
-    if (!navToggle || navToggle.getAttribute("aria-expanded") !== "true") return;
-    navToggle.setAttribute("aria-expanded", "false");
-    navMenu?.classList.remove("open");
-    document.body.style.removeProperty("overflow");
-    dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
+  /* ── 2. Auto-hide header on scroll ──────────── */
+  let lastY = scrollY;
+  window.addEventListener("scroll", throttle(() => {
+    const y = scrollY;
+    const mobileOpen = navToggle?.getAttribute("aria-expanded") === "true";
+    if (!mobileOpen) {
+      header?.classList.toggle("hide", y > 80 && y - lastY > 4);
+      if (y - lastY < -4) header?.classList.remove("hide");
+    }
+    header?.classList.toggle("scrolled", y > 10);
+    lastY = y;
+  }, 80), { passive: true });
+
+  /* ── 3. Mobile menu ─────────────────────────── */
+  const closeMobile = () => {
+    navToggle?.setAttribute("aria-expanded", "false");
+    mobileMenu?.classList.remove("open");
+    mobileMenu?.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    mobileGroupToggles.forEach(b => b.setAttribute("aria-expanded", "false"));
   };
 
   navToggle?.addEventListener("click", () => {
-    const expanded = navToggle.getAttribute("aria-expanded") === "true";
-    navToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
-    navMenu?.classList.toggle("open", !expanded);
-    document.body.style.overflow = expanded ? "" : "hidden";
-    if (expanded) dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
+    const open = navToggle.getAttribute("aria-expanded") === "true";
+    navToggle.setAttribute("aria-expanded", open ? "false" : "true");
+    mobileMenu?.classList.toggle("open", !open);
+    mobileMenu?.setAttribute("aria-hidden", open ? "true" : "false");
+    document.body.style.overflow = open ? "" : "hidden";
   });
 
-  navLinks.forEach((a) => a.addEventListener("click", () => { if (isMobile) closeMobileMenu(); }));
-
   document.addEventListener("click", (e) => {
-    if (!e.target.closest?.(".navbar")) closeMobileMenu();
+    if (!e.target.closest("#header")) closeMobile();
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      closeMobileMenu();
-      dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
-      suggestionsList?.classList.add("hidden");
+      closeMobile();
+      suggestions?.classList.add("hidden");
+      dropdownToggles.forEach(b => b.setAttribute("aria-expanded", "false"));
     }
   });
 
-  /* ── 4) Dropdowns (mobile) ─────────────────────────── */
-  dropdownToggles.forEach((btn) => {
+  /* ── 4. Mobile accordion groups ─────────────── */
+  mobileGroupToggles.forEach((btn) => {
     btn.addEventListener("click", () => {
-      if (!isMobile) return;
-      const expanded = btn.getAttribute("aria-expanded") === "true";
-      dropdownToggles.forEach((b) => b !== btn && b.setAttribute("aria-expanded", "false"));
-      btn.setAttribute("aria-expanded", expanded ? "false" : "true");
+      const open = btn.getAttribute("aria-expanded") === "true";
+      mobileGroupToggles.forEach(b => b !== btn && b.setAttribute("aria-expanded", "false"));
+      btn.setAttribute("aria-expanded", open ? "false" : "true");
     });
+  });
 
+  /* ── 5. Desktop dropdown (keyboard) ─────────── */
+  dropdownToggles.forEach((btn) => {
     btn.addEventListener("keydown", (e) => {
-      if (!isMobile) return;
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         btn.setAttribute("aria-expanded", "true");
-        const first = btn.nextElementSibling?.querySelector?.("a, button");
-        first?.focus?.();
+        btn.nextElementSibling?.querySelector("a")?.focus();
       }
     });
   });
 
-  /* ── 5) Auto-hide header on scroll ─────────────────── */
-  if (header?.dataset.autoHide === "true") {
-    let lastY = window.scrollY || 0;
-
-    const onScroll = throttle(() => {
-      const y = window.scrollY || 0;
-      const delta = y - lastY;
-      const mobileOpen = navToggle?.getAttribute("aria-expanded") === "true";
-
-      if (!mobileOpen) {
-        if (y > 120 && delta > 5) header.classList.add("is-hidden");
-        else if (delta < -5) header.classList.remove("is-hidden");
-      }
-
-      header.classList.toggle("scrolled", y > 40);
-      lastY = y;
-
-      // Back-to-top
-      if (toTopBtn) {
-        toTopBtn.classList.toggle("visible", y > 300);
-        toTopBtn.hidden = false; // keep in DOM, we use opacity/pointer-events
-      }
-    }, 80);
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-  }
-
-  /* ── 6) Back to top ────────────────────────────────── */
-  if (toTopBtn) {
-    toTopBtn.hidden = false; // manage visibility via CSS class
-    toTopBtn.addEventListener("click", () => smoothScrollTo(0));
-  }
-
-  /* ── 7) Smooth scroll for nav links ────────────────── */
-  document.querySelectorAll("a[href^='#']").forEach((link) => {
-    link.addEventListener("click", (e) => {
-      const id = link.getAttribute("href");
-      if (!id || id === "#") return;
-      const target = document.querySelector(id);
-      if (target) {
-        e.preventDefault();
-        const top = target.getBoundingClientRect().top + window.scrollY - 80;
-        smoothScrollTo(top);
-        history.replaceState(null, "", id);
-      }
+  // Arrow key nav inside dropdown
+  document.querySelectorAll(".dropdown").forEach((menu) => {
+    menu.addEventListener("keydown", (e) => {
+      const items = Array.from(menu.querySelectorAll(".drop-item"));
+      const idx = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); items[(idx + 1) % items.length]?.focus(); }
+      if (e.key === "ArrowUp")   { e.preventDefault(); items[(idx - 1 + items.length) % items.length]?.focus(); }
     });
   });
 
-  /* ── 8) Search suggestions ─────────────────────────── */
-  const SUGGESTIONS = [
-    { label: "Home", href: "#home" },
-    { label: "Features", href: "#features" },
-    { label: "Portfolio", href: "#portfolio" },
-    { label: "About", href: "#about" },
-    { label: "Contact", href: "#contact" },
-    { label: "Products: New Arrivals", href: "#new" },
-    { label: "Products: Featured", href: "#featured" },
-    { label: "Products: Categories", href: "#categories" },
-    { label: "Products: Seasonal", href: "#seasonal" },
-    { label: "Services: Consulting", href: "#consulting" },
-    { label: "Services: Development", href: "#development" },
-    { label: "Services: Support", href: "#support" },
-    { label: "Services: Training", href: "#training" },
+  /* ── 6. Search suggestions ───────────────────── */
+  const PAGES = [
+    { label: "Home",                   href: "#" },
+    { label: "Portfolio",              href: "#" },
+    { label: "About",                  href: "#" },
+    { label: "Contact",                href: "#" },
+    { label: "Products › New Arrivals",href: "#" },
+    { label: "Products › Featured",    href: "#" },
+    { label: "Products › Categories",  href: "#" },
+    { label: "Products › Seasonal",    href: "#" },
+    { label: "Services › Consulting",  href: "#" },
+    { label: "Services › Development", href: "#" },
+    { label: "Services › Support",     href: "#" },
+    { label: "Services › Training",    href: "#" },
   ];
 
-  let activeIndex = -1;
+  let activeIdx = -1;
 
-  function renderSuggestions(items) {
-    if (!suggestionsList) return;
-    suggestionsList.innerHTML = "";
-    items.forEach((item, idx) => {
+  const renderSuggestions = (items) => {
+    if (!suggestions) return;
+    suggestions.innerHTML = "";
+    items.forEach((item, i) => {
       const li = document.createElement("li");
-      li.setAttribute("role", "option");
-      li.id = `suggestion-${idx}`;
       li.textContent = item.label;
-      li.dataset.href = item.href;
-      li.addEventListener("mousedown", (e) => { e.preventDefault(); selectSuggestion(li); });
-      suggestionsList.appendChild(li);
+      li.setAttribute("role", "option");
+      li.addEventListener("mousedown", (e) => { e.preventDefault(); pick(item, li); });
+      suggestions.appendChild(li);
     });
-    suggestionsList.classList.toggle("hidden", items.length === 0);
-    suggestionsList.scrollTop = 0;
-    activeIndex = -1;
-  }
+    suggestions.classList.toggle("hidden", !items.length);
+    activeIdx = -1;
+  };
 
-  function highlightActive(index) {
-    if (!suggestionsList) return;
-    const children = Array.from(suggestionsList.children);
-    children.forEach((child, i) => {
-      child.style.background = i === index ? "var(--surface-2)" : "";
-      child.style.color = i === index ? "var(--text)" : "";
-    });
-    activeIndex = index;
-    if (searchInput && index >= 0) {
-      children[index]?.scrollIntoView({ block: "nearest" });
-      searchInput.setAttribute("aria-activedescendant", `suggestion-${index}`);
-    } else {
-      searchInput?.removeAttribute("aria-activedescendant");
-    }
-  }
+  const highlight = (idx) => {
+    const items = suggestions?.querySelectorAll("li");
+    items?.forEach((li, i) => li.classList.toggle("active", i === idx));
+    activeIdx = idx;
+  };
 
-  function selectSuggestion(liEl) {
-    const href = liEl.dataset.href;
-    if (searchInput) searchInput.value = liEl.textContent;
-    suggestionsList?.classList.add("hidden");
-    const target = href && document.querySelector(href);
-    if (target) {
-      const top = target.getBoundingClientRect().top + window.scrollY - 80;
-      smoothScrollTo(top);
-      history.replaceState(null, "", href);
-    }
-  }
+  const pick = (item) => {
+    if (searchInput) searchInput.value = item.label;
+    suggestions?.classList.add("hidden");
+  };
 
-  if (searchInput && suggestionsList) {
-    const updateSuggestions = debounce(() => {
+  if (searchInput && suggestions) {
+    searchInput.addEventListener("input", debounce(() => {
       const q = searchInput.value.trim().toLowerCase();
-      if (!q) { suggestionsList.classList.add("hidden"); return; }
-      renderSuggestions(SUGGESTIONS.filter((s) => s.label.toLowerCase().includes(q)).slice(0, 7));
-    }, 120);
+      if (!q) { suggestions.classList.add("hidden"); return; }
+      renderSuggestions(PAGES.filter(p => p.label.toLowerCase().includes(q)).slice(0, 6));
+    }, 130));
 
-    searchInput.addEventListener("input", updateSuggestions);
-    searchInput.addEventListener("focus", () => { if (searchInput.value.trim()) updateSuggestions(); });
-    searchInput.addEventListener("blur", () => setTimeout(() => suggestionsList.classList.add("hidden"), 100));
+    searchInput.addEventListener("blur", () =>
+      setTimeout(() => suggestions.classList.add("hidden"), 120)
+    );
+
     searchInput.addEventListener("keydown", (e) => {
-      const items = Array.from(suggestionsList.children);
-      if (!items.length && e.key !== "Escape") return;
-      if (e.key === "ArrowDown") { e.preventDefault(); highlightActive((activeIndex + 1) % items.length); }
-      else if (e.key === "ArrowUp") { e.preventDefault(); highlightActive((activeIndex - 1 + items.length) % items.length); }
-      else if (e.key === "Enter" && activeIndex >= 0) { e.preventDefault(); selectSuggestion(items[activeIndex]); }
-      else if (e.key === "Escape") suggestionsList.classList.add("hidden");
-    });
-  }
-
-  /* ── 9) Count-up stats on view ─────────────────────── */
-  if ("IntersectionObserver" in window && statValues.length) {
-    const seen = new WeakSet();
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        const el = entry.target;
-        if (seen.has(el)) return;
-        seen.add(el);
-        const target = parseFloat(el.getAttribute("data-count") || "0");
-
-        if (prefersReduced()) { el.textContent = String(target); io.unobserve(el); return; }
-
-        const duration = 1300;
-        const start = performance.now();
-        const step = (now) => {
-          const t = Math.min(1, (now - start) / duration);
-          const eased = 1 - Math.pow(1 - t, 3);
-          el.textContent = String(Math.floor(target * eased));
-          if (t < 1) requestAnimationFrame(step);
-          else { el.textContent = String(target); io.unobserve(el); }
-        };
-        requestAnimationFrame(step);
-      });
-    }, { threshold: 0.5 });
-    statValues.forEach((el) => io.observe(el));
-  }
-
-  /* ── 10) Card hover glow ────────────────────────────── */
-  cards.forEach((card) => {
-    card.addEventListener("mousemove", (e) => {
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
-      card.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
-    });
-    card.addEventListener("mouseleave", () => {
-      card.style.setProperty("--mx", "50%");
-      card.style.setProperty("--my", "50%");
-    });
-  });
-
-  /* ── 11) Scroll spy ─────────────────────────────────── */
-  const sections = Array.from(document.querySelectorAll("[data-spy][id]"));
-  if ("IntersectionObserver" in window && sections.length) {
-    const mapIdToLink = new Map();
-    navLinks.forEach((a) => {
-      const href = a.getAttribute("href");
-      if (href?.startsWith("#")) mapIdToLink.set(href.slice(1), a);
-    });
-
-    let currentId = null;
-    const spyObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => { if (entry.isIntersecting) currentId = entry.target.id; });
-      if (currentId) {
-        navLinks.forEach((a) => a.classList.remove("active"));
-        mapIdToLink.get(currentId)?.classList.add("active");
+      const items = Array.from(suggestions.querySelectorAll("li"));
+      if (!items.length) return;
+      if (e.key === "ArrowDown")  { e.preventDefault(); highlight((activeIdx + 1) % items.length); }
+      if (e.key === "ArrowUp")    { e.preventDefault(); highlight((activeIdx - 1 + items.length) % items.length); }
+      if (e.key === "Enter" && activeIdx >= 0) {
+        e.preventDefault();
+        pick(PAGES.find(p => p.label === items[activeIdx].textContent));
       }
-    }, { threshold: 0.35, rootMargin: "-15% 0px -45% 0px" });
-    sections.forEach((sec) => spyObserver.observe(sec));
+      if (e.key === "Escape") suggestions.classList.add("hidden");
+    });
   }
 
-  /* ── 12) Scroll reveal ──────────────────────────────── */
-  if ("IntersectionObserver" in window) {
-    // Add reveal class to grid items
-    document.querySelectorAll(".feature, .stat, .card").forEach((el) => el.classList.add("reveal"));
-
-    const revealObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add("in-view"); });
-    }, { threshold: 0.1 });
-    document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
-  }
-
-  /* ── 13) Resize handler ─────────────────────────────── */
+  /* ── 7. Window resize: close mobile if > breakpoint ── */
   window.addEventListener("resize", debounce(() => {
-    const m = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
-    if (m !== isMobile) {
-      isMobile = m;
-      closeMobileMenu();
-      dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
-    }
+    if (window.innerWidth > 860) closeMobile();
   }, 150));
-
-  /* ── 14) Keyboard nav for top-level items ───────────── */
-  const topLevelItems = Array.from(document.querySelectorAll(
-    ".nav-list > .nav-item > .nav-link, .nav-list > .nav-item > .dropdown-toggle"
-  ));
-  topLevelItems.forEach((el, idx) => {
-    el.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        topLevelItems[(idx + 1) % topLevelItems.length].focus();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        topLevelItems[(idx - 1 + topLevelItems.length) % topLevelItems.length].focus();
-      } else if (e.key === "ArrowDown") {
-        const parent = el.closest(".has-dropdown");
-        if (parent && !isMobile) {
-          e.preventDefault();
-          const toggle = parent.querySelector(".dropdown-toggle");
-          toggle?.setAttribute("aria-expanded", "true");
-          const first = parent.querySelector(".dropdown a, .dropdown button");
-          first?.focus?.();
-        }
-      }
-    });
-  });
-
-  /* ── 15) Close dropdown on outside click (mobile) ──── */
-  document.addEventListener("click", (e) => {
-    if (!isMobile) return;
-    if (!e.target.closest?.(".dropdown-toggle") && !e.target.closest?.(".dropdown")) {
-      dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
-    }
-  });
 });

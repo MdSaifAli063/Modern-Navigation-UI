@@ -5,12 +5,13 @@
  * - Mobile menu toggle (with focus/escape handling)
  * - Accessible dropdowns (mobile) + keyboard support
  * - Theme toggle with persistence (light/dark; Shift+Click for auto)
- * - Sticky auto-hide header on scroll
+ * - Sticky auto-hide header on scroll + scrolled class
  * - Back-to-top button
  * - Search suggestions with keyboard navigation
  * - Count-up stats on view
  * - Card hover glow following cursor
  * - Scroll spy to highlight active nav link
+ * - Scroll reveal animation
  * - Footer year
  */
 
@@ -31,262 +32,174 @@ document.addEventListener("DOMContentLoaded", () => {
   const cards = Array.from(document.querySelectorAll(".cards .card"));
   const statValues = Array.from(document.querySelectorAll(".stat .value"));
 
-  const MOBILE_BREAKPOINT = 800; // should match CSS @media
+  const MOBILE_BREAKPOINT = 800;
   let isMobile = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
 
-  // Utilities
+  /* ── Utilities ─────────────────────────────────────── */
   const prefersReduced = () =>
-    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const throttle = (fn, wait = 100) => {
-    let last = 0;
-    let t;
+    let last = 0, t;
     return (...args) => {
       const now = Date.now();
-      if (now - last >= wait) {
-        last = now;
-        fn(...args);
-      } else {
+      if (now - last >= wait) { last = now; fn(...args); }
+      else {
         clearTimeout(t);
-        t = setTimeout(() => {
-          last = Date.now();
-          fn(...args);
-        }, wait - (now - last));
+        t = setTimeout(() => { last = Date.now(); fn(...args); }, wait - (now - last));
       }
     };
   };
 
   const debounce = (fn, wait = 200) => {
     let t;
-    return (...args) => {
-      clearTimeout(t);
-      t = setTimeout(() => fn(...args), wait);
-    };
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
   };
 
-  const smoothScrollTo = (targetTop) => {
-    window.scrollTo({
-      top: targetTop,
-      behavior: prefersReduced() ? "auto" : "smooth",
-    });
-  };
+  const smoothScrollTo = (top) =>
+    window.scrollTo({ top, behavior: prefersReduced() ? "auto" : "smooth" });
 
-  // 1) Footer year
-  if (yearEl) {
-    yearEl.textContent = new Date().getFullYear();
-  }
+  /* ── 1) Footer year ────────────────────────────────── */
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  // 2) Theme toggle with persistence
-  const THEME_KEY = "preferred-theme"; // 'light' | 'dark' | 'auto'
-  const validTheme = (t) => t === "light" || t === "dark" || t === "auto";
+  /* ── 2) Theme ──────────────────────────────────────── */
+  const THEME_KEY = "preferred-theme";
+  const validTheme = (t) => ["light", "dark", "auto"].includes(t);
 
   function applyTheme(theme, persist = true) {
     if (!validTheme(theme)) theme = "auto";
     html.setAttribute("data-theme", theme);
-    if (persist) {
-      try {
-        localStorage.setItem(THEME_KEY, theme);
-      } catch {}
-    }
-    // Update button visuals (moon icon implies you can switch to dark)
-    const effectiveDark =
-      theme === "dark" || (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    if (persist) try { localStorage.setItem(THEME_KEY, theme); } catch {}
 
-    // If currently dark, show sun icon (to switch to light). If light, show moon.
+    const effectiveDark =
+      theme === "dark" ||
+      (theme === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
     if (moonIcon && sunIcon) {
-      if (effectiveDark) {
-        sunIcon.classList.remove("hidden");
-        moonIcon.classList.add("hidden");
-        themeToggleBtn?.setAttribute("aria-pressed", "true");
-      } else {
-        sunIcon.classList.add("hidden");
-        moonIcon.classList.remove("hidden");
-        themeToggleBtn?.setAttribute("aria-pressed", "false");
-      }
+      moonIcon.classList.toggle("hidden", effectiveDark);
+      sunIcon.classList.toggle("hidden", !effectiveDark);
+      themeToggleBtn?.setAttribute("aria-pressed", String(effectiveDark));
     }
   }
 
   function initTheme() {
     let stored = null;
-    try {
-      stored = localStorage.getItem(THEME_KEY);
-    } catch {}
-    const initial = validTheme(stored) ? stored : html.getAttribute("data-theme") || "auto";
-    applyTheme(initial, false);
+    try { stored = localStorage.getItem(THEME_KEY); } catch {}
+    applyTheme(validTheme(stored) ? stored : html.getAttribute("data-theme") || "auto", false);
   }
 
   initTheme();
 
-  if (themeToggleBtn) {
-    themeToggleBtn.addEventListener("click", (e) => {
-      const current = html.getAttribute("data-theme") || "auto";
-      // Normal click: toggle between light and dark
-      // Shift+Click: set to auto (follow system)
-      if (e.shiftKey) {
-        applyTheme("auto");
-        return;
-      }
-      const next = current === "dark" ? "light" : "dark";
-      applyTheme(next);
-    });
-  }
-
-  // Also react to system theme changes when in auto
-  const colorSchemeMQ = window.matchMedia("(prefers-color-scheme: dark)");
-  colorSchemeMQ.addEventListener?.("change", () => {
-    if ((localStorage.getItem(THEME_KEY) || "auto") === "auto") {
-      applyTheme("auto", false);
-    }
+  themeToggleBtn?.addEventListener("click", (e) => {
+    const current = html.getAttribute("data-theme") || "auto";
+    applyTheme(e.shiftKey ? "auto" : current === "dark" ? "light" : "dark");
   });
 
-  // 3) Mobile menu toggle + close on outside/escape
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+    if ((localStorage.getItem(THEME_KEY) || "auto") === "auto") applyTheme("auto", false);
+  });
+
+  /* ── 3) Mobile menu ────────────────────────────────── */
   const closeMobileMenu = () => {
-    if (!navToggle) return;
-    if (navToggle.getAttribute("aria-expanded") === "true") {
-      navToggle.setAttribute("aria-expanded", "false");
-      navMenu?.classList.remove("open");
-      document.body.style.removeProperty("overflow");
-      // collapse all mobile dropdowns
-      dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
-    }
+    if (!navToggle || navToggle.getAttribute("aria-expanded") !== "true") return;
+    navToggle.setAttribute("aria-expanded", "false");
+    navMenu?.classList.remove("open");
+    document.body.style.removeProperty("overflow");
+    dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
   };
 
-  if (navToggle) {
-    navToggle.addEventListener("click", () => {
-      const expanded = navToggle.getAttribute("aria-expanded") === "true";
-      navToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
-      if (!expanded) {
-        // opening
-        navMenu?.classList.add("open");
-        document.body.style.overflow = "hidden";
-      } else {
-        // closing
-        navMenu?.classList.remove("open");
-        document.body.style.removeProperty("overflow");
-        dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
-      }
-    });
-  }
-
-  // Close mobile menu on link click
-  navLinks.forEach((a) =>
-    a.addEventListener("click", () => {
-      if (isMobile) closeMobileMenu();
-    })
-  );
-
-  // Click outside to close mobile menu or dropdowns
-  document.addEventListener("click", (e) => {
-    const target = e.target;
-    const clickedInsideNav = target.closest?.(".navbar");
-    if (!clickedInsideNav) {
-      // Outside nav
-      closeMobileMenu();
-    }
+  navToggle?.addEventListener("click", () => {
+    const expanded = navToggle.getAttribute("aria-expanded") === "true";
+    navToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+    navMenu?.classList.toggle("open", !expanded);
+    document.body.style.overflow = expanded ? "" : "hidden";
+    if (expanded) dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
   });
 
-  // Escape closes mobile menu or open dropdowns
+  navLinks.forEach((a) => a.addEventListener("click", () => { if (isMobile) closeMobileMenu(); }));
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest?.(".navbar")) closeMobileMenu();
+  });
+
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeMobileMenu();
-      // close any dropdowns (mobile)
       dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
       suggestionsList?.classList.add("hidden");
     }
   });
 
-  // 4) Accessible dropdowns (mobile)
-  function initDropdowns() {
-    dropdownToggles.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        // Only toggle on mobile; desktop uses hover CSS
-        if (!isMobile) return;
-        const expanded = btn.getAttribute("aria-expanded") === "true";
-        // close others first
-        dropdownToggles.forEach((b) => {
-          if (b !== btn) b.setAttribute("aria-expanded", "false");
-        });
-        btn.setAttribute("aria-expanded", expanded ? "false" : "true");
-      });
-
-      // Keyboard open/close
-      btn.addEventListener("keydown", (e) => {
-        if (!isMobile) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          btn.click();
-        }
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          btn.setAttribute("aria-expanded", "true");
-          // focus first item
-          const menu = btn.nextElementSibling;
-          const firstItem = menu?.querySelector?.("a, button, [tabindex]:not([tabindex='-1'])");
-          firstItem?.focus?.();
-        }
-      });
+  /* ── 4) Dropdowns (mobile) ─────────────────────────── */
+  dropdownToggles.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!isMobile) return;
+      const expanded = btn.getAttribute("aria-expanded") === "true";
+      dropdownToggles.forEach((b) => b !== btn && b.setAttribute("aria-expanded", "false"));
+      btn.setAttribute("aria-expanded", expanded ? "false" : "true");
     });
-  }
 
-  initDropdowns();
-
-  // 5) Sticky auto-hide header on scroll
-  if (header && header.dataset.autoHide === "true") {
-    let lastY = window.scrollY || 0;
-    let locked = false; // don't hide when mobile menu is open
-
-    const onScroll = throttle(() => {
-      const y = window.scrollY || 0;
-      const delta = y - lastY;
-
-      // Lock when mobile menu open
-      locked = navToggle && navToggle.getAttribute("aria-expanded") === "true";
-
-      if (!locked) {
-        if (y > 120 && delta > 5) {
-          header.classList.add("is-hidden");
-        } else if (delta < -5) {
-          header.classList.remove("is-hidden");
-        }
-      }
-      lastY = y;
-      // Toggle back-to-top
-      if (toTopBtn) {
-        if (y > 300) {
-          toTopBtn.hidden = false;
-          toTopBtn.style.opacity = "1";
-        } else {
-          toTopBtn.style.opacity = "0.9";
-          toTopBtn.hidden = true;
-        }
-      }
-    }, 100);
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-  }
-
-  // 6) Back-to-top behavior
-  if (toTopBtn) {
-    toTopBtn.addEventListener("click", () => smoothScrollTo(0));
-  }
-
-  // 7) Smooth scroll for in-page links
-  navLinks.forEach((link) => {
-    link.addEventListener("click", (e) => {
-      const id = link.getAttribute("href");
-      if (id && id.startsWith("#")) {
-        const target = document.querySelector(id);
-        if (target) {
-          e.preventDefault();
-          const top = target.getBoundingClientRect().top + window.scrollY - 80; // offset for sticky header
-          smoothScrollTo(top);
-          history.replaceState(null, "", id);
-        }
+    btn.addEventListener("keydown", (e) => {
+      if (!isMobile) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        btn.setAttribute("aria-expanded", "true");
+        const first = btn.nextElementSibling?.querySelector?.("a, button");
+        first?.focus?.();
       }
     });
   });
 
-  // 8) Search suggestions
+  /* ── 5) Auto-hide header on scroll ─────────────────── */
+  if (header?.dataset.autoHide === "true") {
+    let lastY = window.scrollY || 0;
+
+    const onScroll = throttle(() => {
+      const y = window.scrollY || 0;
+      const delta = y - lastY;
+      const mobileOpen = navToggle?.getAttribute("aria-expanded") === "true";
+
+      if (!mobileOpen) {
+        if (y > 120 && delta > 5) header.classList.add("is-hidden");
+        else if (delta < -5) header.classList.remove("is-hidden");
+      }
+
+      header.classList.toggle("scrolled", y > 40);
+      lastY = y;
+
+      // Back-to-top
+      if (toTopBtn) {
+        toTopBtn.classList.toggle("visible", y > 300);
+        toTopBtn.hidden = false; // keep in DOM, we use opacity/pointer-events
+      }
+    }, 80);
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
+
+  /* ── 6) Back to top ────────────────────────────────── */
+  if (toTopBtn) {
+    toTopBtn.hidden = false; // manage visibility via CSS class
+    toTopBtn.addEventListener("click", () => smoothScrollTo(0));
+  }
+
+  /* ── 7) Smooth scroll for nav links ────────────────── */
+  document.querySelectorAll("a[href^='#']").forEach((link) => {
+    link.addEventListener("click", (e) => {
+      const id = link.getAttribute("href");
+      if (!id || id === "#") return;
+      const target = document.querySelector(id);
+      if (target) {
+        e.preventDefault();
+        const top = target.getBoundingClientRect().top + window.scrollY - 80;
+        smoothScrollTo(top);
+        history.replaceState(null, "", id);
+      }
+    });
+  });
+
+  /* ── 8) Search suggestions ─────────────────────────── */
   const SUGGESTIONS = [
     { label: "Home", href: "#home" },
     { label: "Features", href: "#features" },
@@ -303,7 +216,7 @@ document.addEventListener("DOMContentLoaded", () => {
     { label: "Services: Training", href: "#training" },
   ];
 
-  let activeIndex = -1; // keyboard selection index
+  let activeIndex = -1;
 
   function renderSuggestions(items) {
     if (!suggestionsList) return;
@@ -314,235 +227,173 @@ document.addEventListener("DOMContentLoaded", () => {
       li.id = `suggestion-${idx}`;
       li.textContent = item.label;
       li.dataset.href = item.href;
-      li.addEventListener("mousedown", (e) => {
-        // mousedown so it triggers before input blur
-        e.preventDefault();
-        selectSuggestion(li);
-      });
+      li.addEventListener("mousedown", (e) => { e.preventDefault(); selectSuggestion(li); });
       suggestionsList.appendChild(li);
     });
     suggestionsList.classList.toggle("hidden", items.length === 0);
     suggestionsList.scrollTop = 0;
-    activeIndex = items.length ? 0 : -1;
-    highlightActive(items.length ? 0 : -1);
+    activeIndex = -1;
   }
 
   function highlightActive(index) {
     if (!suggestionsList) return;
-    Array.from(suggestionsList.children).forEach((child, i) => {
-      child.style.background = i === index ? "var(--surface-2)" : "transparent";
+    const children = Array.from(suggestionsList.children);
+    children.forEach((child, i) => {
+      child.style.background = i === index ? "var(--surface-2)" : "";
+      child.style.color = i === index ? "var(--text)" : "";
     });
     activeIndex = index;
     if (searchInput && index >= 0) {
-      const activeEl = suggestionsList.children[index];
-      activeEl && activeEl.scrollIntoView({ block: "nearest" });
-      searchInput.setAttribute("aria-activedescendant", activeEl.id);
-    } else if (searchInput) {
-      searchInput.removeAttribute("aria-activedescendant");
+      children[index]?.scrollIntoView({ block: "nearest" });
+      searchInput.setAttribute("aria-activedescendant", `suggestion-${index}`);
+    } else {
+      searchInput?.removeAttribute("aria-activedescendant");
     }
   }
 
   function selectSuggestion(liEl) {
     const href = liEl.dataset.href;
-    const label = liEl.textContent;
-    if (searchInput) searchInput.value = label;
+    if (searchInput) searchInput.value = liEl.textContent;
     suggestionsList?.classList.add("hidden");
-    if (href && href.startsWith("#")) {
-      const target = document.querySelector(href);
-      if (target) {
-        const top = target.getBoundingClientRect().top + window.scrollY - 80;
-        smoothScrollTo(top);
-        history.replaceState(null, "", href);
-      }
+    const target = href && document.querySelector(href);
+    if (target) {
+      const top = target.getBoundingClientRect().top + window.scrollY - 80;
+      smoothScrollTo(top);
+      history.replaceState(null, "", href);
     }
   }
 
   if (searchInput && suggestionsList) {
     const updateSuggestions = debounce(() => {
       const q = searchInput.value.trim().toLowerCase();
-      if (!q) {
-        suggestionsList.classList.add("hidden");
-        suggestionsList.innerHTML = "";
-        return;
-      }
-      const items = SUGGESTIONS.filter((s) => s.label.toLowerCase().includes(q)).slice(0, 8);
-      renderSuggestions(items);
+      if (!q) { suggestionsList.classList.add("hidden"); return; }
+      renderSuggestions(SUGGESTIONS.filter((s) => s.label.toLowerCase().includes(q)).slice(0, 7));
     }, 120);
 
     searchInput.addEventListener("input", updateSuggestions);
-    searchInput.addEventListener("focus", () => {
-      if (searchInput.value.trim()) updateSuggestions();
-    });
-    searchInput.addEventListener("blur", () => {
-      // Slight delay so click on item registers
-      setTimeout(() => suggestionsList.classList.add("hidden"), 80);
-    });
-
+    searchInput.addEventListener("focus", () => { if (searchInput.value.trim()) updateSuggestions(); });
+    searchInput.addEventListener("blur", () => setTimeout(() => suggestionsList.classList.add("hidden"), 100));
     searchInput.addEventListener("keydown", (e) => {
       const items = Array.from(suggestionsList.children);
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        if (!items.length) return;
-        highlightActive((activeIndex + 1) % items.length);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        if (!items.length) return;
-        highlightActive((activeIndex - 1 + items.length) % items.length);
-      } else if (e.key === "Enter") {
-        if (activeIndex >= 0 && items[activeIndex]) {
-          e.preventDefault();
-          selectSuggestion(items[activeIndex]);
-        }
-      } else if (e.key === "Escape") {
-        suggestionsList.classList.add("hidden");
-      }
+      if (!items.length && e.key !== "Escape") return;
+      if (e.key === "ArrowDown") { e.preventDefault(); highlightActive((activeIndex + 1) % items.length); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); highlightActive((activeIndex - 1 + items.length) % items.length); }
+      else if (e.key === "Enter" && activeIndex >= 0) { e.preventDefault(); selectSuggestion(items[activeIndex]); }
+      else if (e.key === "Escape") suggestionsList.classList.add("hidden");
     });
   }
 
-  // 9) Count-up stats on view
+  /* ── 9) Count-up stats on view ─────────────────────── */
   if ("IntersectionObserver" in window && statValues.length) {
     const seen = new WeakSet();
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const el = entry.target;
-            if (seen.has(el)) return;
-            seen.add(el);
-            const target = parseFloat(el.getAttribute("data-count") || "0");
-            const duration = 1200; // ms
-            const start = prefersReduced() ? duration : performance.now();
-            const from = 0;
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target;
+        if (seen.has(el)) return;
+        seen.add(el);
+        const target = parseFloat(el.getAttribute("data-count") || "0");
 
-            if (prefersReduced()) {
-              el.textContent = String(target);
-              io.unobserve(el);
-              return;
-            }
+        if (prefersReduced()) { el.textContent = String(target); io.unobserve(el); return; }
 
-            const step = (now) => {
-              const t = Math.min(1, (now - start) / duration);
-              const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-              const val = Math.floor(from + (target - from) * eased);
-              el.textContent = String(val);
-              if (t < 1) {
-                requestAnimationFrame(step);
-              } else {
-                el.textContent = String(target);
-                io.unobserve(el);
-              }
-            };
-            requestAnimationFrame(step);
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
+        const duration = 1300;
+        const start = performance.now();
+        const step = (now) => {
+          const t = Math.min(1, (now - start) / duration);
+          const eased = 1 - Math.pow(1 - t, 3);
+          el.textContent = String(Math.floor(target * eased));
+          if (t < 1) requestAnimationFrame(step);
+          else { el.textContent = String(target); io.unobserve(el); }
+        };
+        requestAnimationFrame(step);
+      });
+    }, { threshold: 0.5 });
     statValues.forEach((el) => io.observe(el));
   }
 
-  // 10) Card hover glow following cursor
-  const onCardMouseMove = (e) => {
-    const card = e.currentTarget;
-    const rect = card.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    card.style.setProperty("--mx", `${x}%`);
-    card.style.setProperty("--my", `${y}%`);
-  };
-  const onCardLeave = (e) => {
-    const card = e.currentTarget;
-    card.style.setProperty("--mx", `50%`);
-    card.style.setProperty("--my", `50%`);
-  };
+  /* ── 10) Card hover glow ────────────────────────────── */
   cards.forEach((card) => {
-    card.addEventListener("mousemove", onCardMouseMove);
-    card.addEventListener("mouseleave", onCardLeave);
+    card.addEventListener("mousemove", (e) => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+      card.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
+    });
+    card.addEventListener("mouseleave", () => {
+      card.style.setProperty("--mx", "50%");
+      card.style.setProperty("--my", "50%");
+    });
   });
 
-  // 11) Scroll spy: highlight active nav link when section is in view
+  /* ── 11) Scroll spy ─────────────────────────────────── */
   const sections = Array.from(document.querySelectorAll("[data-spy][id]"));
   if ("IntersectionObserver" in window && sections.length) {
     const mapIdToLink = new Map();
     navLinks.forEach((a) => {
       const href = a.getAttribute("href");
-      if (href && href.startsWith("#")) {
-        mapIdToLink.set(href.slice(1), a);
-      }
+      if (href?.startsWith("#")) mapIdToLink.set(href.slice(1), a);
     });
 
     let currentId = null;
-    const spyObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            currentId = entry.target.id;
-          }
-        });
-        if (currentId) {
-          // update active classes
-          navLinks.forEach((a) => a.classList.remove("active"));
-          const activeLink = mapIdToLink.get(currentId);
-          activeLink?.classList.add("active");
-        }
-      },
-      {
-        root: null,
-        threshold: 0.4,
-        rootMargin: "-20% 0px -40% 0px",
+    const spyObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => { if (entry.isIntersecting) currentId = entry.target.id; });
+      if (currentId) {
+        navLinks.forEach((a) => a.classList.remove("active"));
+        mapIdToLink.get(currentId)?.classList.add("active");
       }
-    );
+    }, { threshold: 0.35, rootMargin: "-15% 0px -45% 0px" });
     sections.forEach((sec) => spyObserver.observe(sec));
   }
 
-  // 12) Resize handler to update mobile/desktop behavior
-  const onResize = () => {
+  /* ── 12) Scroll reveal ──────────────────────────────── */
+  if ("IntersectionObserver" in window) {
+    // Add reveal class to grid items
+    document.querySelectorAll(".feature, .stat, .card").forEach((el) => el.classList.add("reveal"));
+
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => { if (entry.isIntersecting) entry.target.classList.add("in-view"); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
+  }
+
+  /* ── 13) Resize handler ─────────────────────────────── */
+  window.addEventListener("resize", debounce(() => {
     const m = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
     if (m !== isMobile) {
       isMobile = m;
-      // Close menus when transitioning between modes
       closeMobileMenu();
       dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     }
-  };
-  window.addEventListener("resize", debounce(onResize, 150));
+  }, 150));
 
-  // 13) Keyboard navigation between top-level nav items (basic)
-  const topLevelItems = Array.from(document.querySelectorAll(".nav-list > .nav-item > .nav-link, .nav-list > .nav-item > .dropdown-toggle"));
+  /* ── 14) Keyboard nav for top-level items ───────────── */
+  const topLevelItems = Array.from(document.querySelectorAll(
+    ".nav-list > .nav-item > .nav-link, .nav-list > .nav-item > .dropdown-toggle"
+  ));
   topLevelItems.forEach((el, idx) => {
     el.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        const next = topLevelItems[(idx + 1) % topLevelItems.length];
-        next.focus();
+        topLevelItems[(idx + 1) % topLevelItems.length].focus();
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        const prev = topLevelItems[(idx - 1 + topLevelItems.length) % topLevelItems.length];
-        prev.focus();
+        topLevelItems[(idx - 1 + topLevelItems.length) % topLevelItems.length].focus();
       } else if (e.key === "ArrowDown") {
-        // Open dropdown on desktop and focus first item
         const parent = el.closest(".has-dropdown");
-        if (parent) {
+        if (parent && !isMobile) {
+          e.preventDefault();
           const toggle = parent.querySelector(".dropdown-toggle");
-          const menu = parent.querySelector(".dropdown");
-          if (!isMobile && toggle && menu) {
-            e.preventDefault();
-            toggle.setAttribute("aria-expanded", "true");
-            const first = menu.querySelector("a, button, [tabindex]:not([tabindex='-1'])");
-            first?.focus?.();
-          }
+          toggle?.setAttribute("aria-expanded", "true");
+          const first = parent.querySelector(".dropdown a, .dropdown button");
+          first?.focus?.();
         }
       }
     });
   });
 
-  // Close dropdown when clicking outside of it (mobile only)
+  /* ── 15) Close dropdown on outside click (mobile) ──── */
   document.addEventListener("click", (e) => {
     if (!isMobile) return;
-    const target = e.target;
-    const isToggle = target.closest?.(".dropdown-toggle");
-    const isDropdown = target.closest?.(".dropdown");
-    if (!isToggle && !isDropdown) {
+    if (!e.target.closest?.(".dropdown-toggle") && !e.target.closest?.(".dropdown")) {
       dropdownToggles.forEach((btn) => btn.setAttribute("aria-expanded", "false"));
     }
   });

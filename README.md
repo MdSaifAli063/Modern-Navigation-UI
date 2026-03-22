@@ -24,11 +24,11 @@ A responsive, accessible, and animated navigation layout with dropdowns, theme t
 
 ## 🖼️ Preview
 
-You can add a screenshot or animation here:
-- docs/preview.png (recommended 1200×630 for social preview)
 ![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/2be33bbf764335b0d02b1bde8bd5893f758c8688/Screenshot%202025-08-31%20003550.png)
+
 - Dark Mode
-![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/c8b1d9bf33889c01a3ac6eccc6d425f43399642c/Screenshot%202025-08-31%20005137.png)
+  
+![image](https://github.com/MdSaifAli063/Modern-Navigation-UI/blob/2f5f2d8918128762a3aa794dca974d2bdcc5fd6e/Screenshot%202026-03-20%20014009.png)
 
 ---
 

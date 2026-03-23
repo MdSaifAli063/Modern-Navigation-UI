@@ -1,5 +1,6 @@
 # 🧭 Modern Navigation Bar
 
+
 A responsive, accessible, and animated navigation layout with dropdowns, theme toggle, search suggestions, sticky auto-hide header, and smooth section scrolling. Designed for a futuristic look with glassmorphism and neon touches.
 
 - Live feel: animated background layers (gradient, grid, blobs, noise)

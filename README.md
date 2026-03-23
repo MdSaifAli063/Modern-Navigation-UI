@@ -6,7 +6,6 @@ A responsive, accessible, and animated navigation layout with dropdowns, theme t
 - Semantic HTML with ARIA roles
 - Desktop-first polish with scalable typography and spacing
 
-
 ---
 
 ## ✨ Features

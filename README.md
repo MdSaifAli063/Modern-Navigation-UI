@@ -8,7 +8,6 @@ A responsive, accessible, and animated navigation layout with dropdowns, theme t
 
 ---
 
-
 ## ✨ Features
 
 - 🔽 Accessible dropdown menus (keyboard and ARIA friendly)

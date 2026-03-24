@@ -125,8 +125,6 @@ Tip: For 4-column layouts on large screens:
 - Back-to-top button visibility and smooth scroll
 - Search suggestions list update and navigation
 
-Note: If you extend behavior, keep ARIA attributes and focus management in sync.
-
 ---
 
 ## 🧪 Browser Support
